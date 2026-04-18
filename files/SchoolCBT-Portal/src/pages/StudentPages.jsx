@@ -202,7 +202,7 @@ export function ExamPage({ course, onComplete }) {
         .single()
 
       // ── Shuffle questions order and options per question ──
-      // Fisher-Yates shuffle
+      // Fisher-Yates shuffle — works on any array
       const shuffle = (arr) => {
         const a = [...arr]
         for (let i = a.length - 1; i > 0; i--) {
@@ -212,29 +212,30 @@ export function ExamPage({ course, onComplete }) {
         return a
       }
 
-      // Shuffle question order so each student gets different order
+      // Shuffle question order — every student gets a different question sequence
       const shuffledQuestions = shuffle(qData || []).map(q => {
-        // Build options array with original labels
-        const origOptions = [
-          { label: 'A', text: q.option_a },
-          { label: 'B', text: q.option_b },
-          { label: 'C', text: q.option_c },
-          { label: 'D', text: q.option_d },
-        ]
-        // Remember which text is correct
-        const correctText = origOptions.find(o => o.label === q.correct_answer)?.text
-        // Shuffle options
-        const shuffledOpts = shuffle(origOptions)
-        // Find new label of the correct answer after shuffle
-        const newCorrectLabel = shuffledOpts.find(o => o.text === correctText)?.label || q.correct_answer
+        // Map label → text so we know which text the admin marked correct
+        const labelToText = { A: q.option_a, B: q.option_b, C: q.option_c, D: q.option_d }
+        const correctText = labelToText[q.correct_answer] // the actual correct text e.g. "Abuja"
+
+        // Build four slots and shuffle their display positions
+        const slots = ['A', 'B', 'C', 'D']
+        const texts  = [q.option_a, q.option_b, q.option_c, q.option_d]
+        const shuffledTexts = shuffle(texts) // randomise the text order
+
+        // Find which new slot now holds the correct text
+        const newCorrectLabel = slots[shuffledTexts.indexOf(correctText)]
+          ?? slots[shuffledTexts.findIndex(t => t === correctText)]
+          ?? q.correct_answer // fallback (should never hit)
 
         return {
           ...q,
-          option_a: shuffledOpts[0].text,
-          option_b: shuffledOpts[1].text,
-          option_c: shuffledOpts[2].text,
-          option_d: shuffledOpts[3].text,
-          correct_answer: newCorrectLabel,
+          option_a: shuffledTexts[0],
+          option_b: shuffledTexts[1],
+          option_c: shuffledTexts[2],
+          option_d: shuffledTexts[3],
+          correct_answer: newCorrectLabel, // now correctly points to the right slot
+          _correct_text: correctText,       // keep original text for safe review comparison
         }
       })
 
@@ -423,7 +424,6 @@ export function ResultsReview({ result, onDone }) {
   const tm = totalMarks || course.total_marks || 100
   const pct = Math.round((score / tm) * 100)
   const pass = pct >= 50
-  const marksPerQ = total > 0 ? (tm / total) : 1
   const optionTexts = (q) => ({ A: q.option_a, B: q.option_b, C: q.option_c, D: q.option_d })
 
   return (
@@ -438,22 +438,6 @@ export function ResultsReview({ result, onDone }) {
           <span style={reviewStyles.scoreLabel}>/ {tm}</span>
         </div>
         <p style={reviewStyles.scoreSub}>{correctCount ?? score} correct out of {total} questions — {course.title}</p>
-
-        {/* Grade breakdown */}
-        <div style={reviewStyles.gradeRow}>
-          <div style={{ ...reviewStyles.gradeBox, background: '#eff6ff', color: '#1d4ed8' }}>
-            <span style={reviewStyles.gradeNum}>{pct}%</span>
-            <span style={reviewStyles.gradeLabel}>Percentage</span>
-          </div>
-          <div style={{ ...reviewStyles.gradeBox, background: pass ? '#dcfce7' : '#fee2e2', color: pass ? '#15803d' : '#dc2626' }}>
-            <span style={reviewStyles.gradeNum}>{getGrade(pct)}</span>
-            <span style={reviewStyles.gradeLabel}>Grade</span>
-          </div>
-          <div style={{ ...reviewStyles.gradeBox, background: '#fefce8', color: '#854d0e' }}>
-            <span style={reviewStyles.gradeNum}>{marksPerQ % 1 === 0 ? marksPerQ : marksPerQ.toFixed(2)}</span>
-            <span style={reviewStyles.gradeLabel}>Marks/Question</span>
-          </div>
-        </div>
 
         <div style={reviewStyles.scoreGrid}>
           <div style={{ ...reviewStyles.scoreItem, background: '#dcfce7', color: '#15803d' }}>
