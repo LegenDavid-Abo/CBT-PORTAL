@@ -258,7 +258,7 @@ function FileUploadUsers() {
       const password = (row['password'] || row['Password'] || '').toString().trim()
       const role = (row['role'] || row['Role'] || 'student').toString().trim().toLowerCase()
       const email = (row['email'] || row['Email'] || '').toString().trim() || null
-
+      
       let studentClass = (row['class'] || row['Class'] || '').toString().trim().toUpperCase() || null
       if (!studentClass) studentClass = inferClass(studentId)
       if (studentClass && !CLASSES.includes(studentClass)) studentClass = null
@@ -419,19 +419,28 @@ export function ManageUsers() {
 
   const openEdit = (u) => {
     setEditUser(u)
-    setEditForm({ name: u.name, email: u.email || '', role: u.role, class: u.class || '', is_suspended: u.is_suspended })
+    setEditForm({ name: u.name, email: u.email || '', role: u.role, class: u.class || '', is_suspended: u.is_suspended, new_password: '' })
   }
 
   const saveEdit = async () => {
-    const { error } = await supabase.from('users').update({
-      name: editForm.name,
-      email: editForm.email || null,
+    if (!editForm.name.trim()) return toast.error('Name is required')
+    const payload = {
+      name: editForm.name.trim(),
+      email: editForm.email.trim() || null,
       role: editForm.role,
       class: editForm.role === 'student' ? (editForm.class || 'JSS1') : null,
       is_suspended: editForm.is_suspended,
-    }).eq('id', editUser.id)
-    if (error) return toast.error('Failed to update user')
-    toast.success('User updated')
+    }
+    // If a new password was entered, hash it and update both fields
+    if (editForm.new_password.trim()) {
+      if (editForm.new_password.trim().length < 4) return toast.error('Password must be at least 4 characters')
+      const hashedPassword = await bcrypt.hash(editForm.new_password.trim(), 10)
+      payload.hashed_password = hashedPassword
+      payload.plain_password = editForm.new_password.trim()
+    }
+    const { error } = await supabase.from('users').update(payload).eq('id', editUser.id)
+    if (error) return toast.error('Failed to update user: ' + error.message)
+    toast.success('User updated' + (editForm.new_password.trim() ? ' (password changed)' : ''))
     setEditUser(null)
     load()
   }
@@ -525,6 +534,10 @@ export function ManageUsers() {
             <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
               <div style={sa.field}><label style={sa.label}>Full Name</label><input style={sa.input} value={editForm.name} onChange={e => setEditForm(f => ({ ...f, name: e.target.value }))} /></div>
               <div style={sa.field}><label style={sa.label}>Email (optional)</label><input style={sa.input} value={editForm.email} onChange={e => setEditForm(f => ({ ...f, email: e.target.value }))} /></div>
+              <div style={sa.field}>
+                <label style={sa.label}>New Password <span style={{color:'#94a3b8',fontWeight:'400',fontSize:'12px'}}>(leave blank to keep current)</span></label>
+                <input style={sa.input} type="password" placeholder="Enter new password..." value={editForm.new_password} onChange={e => setEditForm(f => ({ ...f, new_password: e.target.value }))} />
+              </div>
               <div style={sa.field}><label style={sa.label}>Role</label>
                 <select style={sa.input} value={editForm.role} onChange={e => setEditForm(f => ({ ...f, role: e.target.value }))}>
                   <option value="student">Student</option>
